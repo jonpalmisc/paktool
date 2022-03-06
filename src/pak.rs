@@ -6,7 +6,6 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::ops::Deref;
-use std::os::unix::prelude::FileExt;
 
 use byteorder::*;
 use flate2::write::ZlibDecoder;
@@ -98,8 +97,14 @@ impl Entry {
             data: Vec::new(),
         };
 
+        // This method is expected to only advance the file's position by the
+        // width of the entry struct. Before the entry's data is read, the
+        // current stream position must be saved.
+        let saved_pos = f.stream_position()?;
+
         let mut raw_data = vec![0u8; entry.min_size as usize];
-        f.read_exact_at(&mut raw_data, entry.offset.into())?;
+        f.seek(SeekFrom::Start(entry.offset.into()))?;
+        f.read_exact(&mut raw_data)?;
 
         if entry.flags == 0 {
             entry.data = raw_data
@@ -108,6 +113,9 @@ impl Entry {
             z.write_all(&raw_data).unwrap();
             entry.data = z.finish().unwrap();
         }
+
+        // Restore the stream position before returning.
+        f.seek(SeekFrom::Start(saved_pos))?;
 
         Ok(entry)
     }
