@@ -16,7 +16,7 @@ fn list_archive(path: &str) {
 
     println!("{}:", &path);
     for (i, e) in archive.iter().enumerate() {
-        println!("  {:>2} {:#010x} {:>10} {}", i, e.offset, e.size, e.name);
+        println!("  {:>2} {:#010x} {:>10} {}", i + 1, e.offset, e.size, e.name);
     }
 }
 
