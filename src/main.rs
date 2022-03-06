@@ -32,11 +32,18 @@ fn list_archive(path: &str) {
     let archive = Archive::open(path).unwrap();
 
     for (i, e) in archive.iter().enumerate() {
+        let flag = match e.flags {
+            0 => 'r',
+            1 => 'z',
+            _ => '?',
+        };
+
         println!(
-            "  {:>4}  {:08x}  {:>9}  {}",
+            "  {:>4} {:08x} {:>9} ({}) {}",
             i + 1,
             e.offset,
             display_size(e.size),
+            flag,
             e.name
         );
     }
