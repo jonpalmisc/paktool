@@ -12,6 +12,7 @@ use flate2::write::ZlibDecoder;
 
 /// A PAK archive.
 pub struct Archive {
+    file: File,
     pub entries: Vec<Entry>,
 }
 
@@ -45,7 +46,27 @@ impl Archive {
         // removed to prevent accidental extraction, etc.
         entries.remove(entries.len() - 1);
 
-        Ok(Self { entries })
+        Ok(Self { file, entries })
+    }
+
+    /// Get the (uncompressed_ data for a the entry at the given `index`.
+    pub fn entry_data(&mut self, index: usize) -> Result<Vec<u8>, std::io::Error> {
+        let entry = &self.entries[index];
+
+        let mut data = Vec::new();
+        let mut raw_data = vec![0u8; entry.min_size as usize];
+        self.file.seek(SeekFrom::Start(entry.offset.into()))?;
+        self.file.read_exact(&mut raw_data)?;
+
+        if entry.flags == 0 {
+            data = raw_data
+        } else if entry.flags == 1 {
+            let mut z = ZlibDecoder::new(data);
+            z.write_all(&raw_data).unwrap();
+            data = z.finish().unwrap();
+        }
+
+        Ok(data)
     }
 }
 
@@ -87,7 +108,7 @@ pub struct Entry {
 
 impl Entry {
     pub fn read_from(f: &mut File) -> Result<Self, std::io::Error> {
-        let mut entry = Self {
+        let entry = Self {
             reserved: f.read_u32::<LE>()?,
             min_size: f.read_u32::<LE>()?,
             size: f.read_u32::<LE>()?,
@@ -96,26 +117,6 @@ impl Entry {
             name: String::new(),
             data: Vec::new(),
         };
-
-        // This method is expected to only advance the file's position by the
-        // width of the entry struct. Before the entry's data is read, the
-        // current stream position must be saved.
-        let saved_pos = f.stream_position()?;
-
-        let mut raw_data = vec![0u8; entry.min_size as usize];
-        f.seek(SeekFrom::Start(entry.offset.into()))?;
-        f.read_exact(&mut raw_data)?;
-
-        if entry.flags == 0 {
-            entry.data = raw_data
-        } else if entry.flags == 1 {
-            let mut z = ZlibDecoder::new(entry.data);
-            z.write_all(&raw_data).unwrap();
-            entry.data = z.finish().unwrap();
-        }
-
-        // Restore the stream position before returning.
-        f.seek(SeekFrom::Start(saved_pos))?;
 
         Ok(entry)
     }
