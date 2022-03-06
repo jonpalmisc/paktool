@@ -3,6 +3,8 @@
 // Use of this source code is governed by the BSD 3-Clause license; the full
 // terms of the license can be found in the LICENSE.txt file.
 
+use std::{fs, path::Path};
+
 mod pak;
 use pak::*;
 
@@ -49,6 +51,26 @@ fn list_archive(path: &str) {
     }
 }
 
+/// Extract an archive's content in place.
+fn extract_archive(path_str: &str) {
+    let mut archive = Archive::open(path_str).unwrap();
+
+    let mut root_path = Path::new(path_str).to_path_buf();
+    root_path.set_extension("");
+
+    for i in 0..archive.entries.len() {
+        let data = archive.entry_data(i).unwrap();
+        let entry = &archive[i];
+
+        let entry_path = Path::new(&entry.name);
+        let output_file_path = root_path.join(entry_path);
+
+        println!("{}", output_file_path.to_str().unwrap());
+        fs::create_dir_all(output_file_path.parent().unwrap()).unwrap();
+        fs::write(output_file_path, &data).unwrap();
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -68,7 +90,7 @@ fn main() {
     if opts.opt_present("l") {
         list_archive(input_path)
     } else if opts.opt_present("e") {
-        todo!()
+        extract_archive(input_path);
     } else {
         show_usage_and_quit(&opts_cfg);
     }
