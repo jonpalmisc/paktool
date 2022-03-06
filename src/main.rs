@@ -52,13 +52,18 @@ fn list_archive(path: &str) {
 }
 
 /// Extract an archive's content in place.
-fn extract_archive(path_str: &str) {
+fn extract_archive(path_str: &str, index: usize) {
     let mut archive = Archive::open(path_str).unwrap();
 
     let mut root_path = Path::new(path_str).to_path_buf();
     root_path.set_extension("");
 
     for i in 0..archive.entries.len() {
+        // If a specific index was requested, skip all other indices.
+        if index != 0 && i != index {
+            continue;
+        }
+
         let data = archive.entry_data(i).unwrap();
         let entry = &archive[i];
 
@@ -78,6 +83,12 @@ fn main() {
     opts_cfg.optflag("h", "help", "Show help and usage info");
     opts_cfg.optflag("l", "list", "List, but do not extract, archive contents");
     opts_cfg.optflag("e", "extract", "Extract the archive in place");
+    opts_cfg.optopt(
+        "i",
+        "index",
+        "The entry to extract (all entries by default)",
+        "INDEX",
+    );
 
     let opts = opts_cfg.parse(&args[1..]).unwrap();
 
@@ -87,10 +98,17 @@ fn main() {
         None => show_usage_and_quit(&opts_cfg),
     };
 
+    // Get the requested extraction index if provided, otherwise, default to
+    // zero, which is treated as "all entries" by the extraction procedure.
+    let index: usize = match opts.opt_get("i") {
+        Ok(Some(i)) => i,
+        _ => 0,
+    };
+
     if opts.opt_present("l") {
         list_archive(input_path)
     } else if opts.opt_present("e") {
-        extract_archive(input_path);
+        extract_archive(input_path, index);
     } else {
         show_usage_and_quit(&opts_cfg);
     }
