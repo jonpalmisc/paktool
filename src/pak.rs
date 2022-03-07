@@ -120,4 +120,38 @@ impl Entry {
 
         Ok(entry)
     }
+
+    /// Get the formatted line item for this entry.
+    pub fn line_item(&self) -> String {
+        let flag = match self.flags {
+            0 => 'r',
+            1 => 'z',
+            _ => '?',
+        };
+
+        format!(
+            "{:08x} {:>9} ({}) {}",
+            self.offset,
+            display_size(self.size),
+            flag,
+            self.name
+        )
+    }
+}
+
+
+/// File size suffixes, up to gigabytes.
+const SIZE_SUFFIXES: &[&str] = &["KB", "MB", "GB"];
+
+/// Converts a size in bytes into a human-friendly display string.
+fn display_size(bytes: u32) -> String {
+    let mut size = bytes as f32 / 1024.0;
+    let mut degree = 0;
+
+    while size > 1024.0 {
+        size /= 1024.0;
+        degree += 1;
+    }
+
+    format!("{:.2} {}", size, SIZE_SUFFIXES[degree])
 }

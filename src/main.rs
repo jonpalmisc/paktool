@@ -13,41 +13,12 @@ fn show_usage_and_quit(cfg: &getopts::Options) -> ! {
     std::process::exit(0);
 }
 
-/// File size suffixes, up to gigabytes.
-const SIZE_SUFFIXES: &[&str] = &["KB", "MB", "GB"];
-
-/// Converts a size in bytes into a human-friendly display string.
-fn display_size(bytes: u32) -> String {
-    let mut size = bytes as f32 / 1024.0;
-    let mut degree = 0;
-
-    while size > 1024.0 {
-        size /= 1024.0;
-        degree += 1;
-    }
-
-    format!("{:.2} {}", size, SIZE_SUFFIXES[degree])
-}
-
 /// Print the entry list of an archive to the terminal.
 fn list_archive(path: &str) {
     let archive = Archive::open(path).unwrap();
 
     for (i, e) in archive.iter().enumerate() {
-        let flag = match e.flags {
-            0 => 'r',
-            1 => 'z',
-            _ => '?',
-        };
-
-        println!(
-            "  {:>4} {:08x} {:>9} ({}) {}",
-            i + 1,
-            e.offset,
-            display_size(e.size),
-            flag,
-            e.name
-        );
+        println!("  {:>4}  {}", i, e.line_item());
     }
 }
 
