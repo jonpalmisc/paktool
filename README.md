@@ -2,7 +2,7 @@
 
 PakTool is a utility for working with the PAK archive format used by the games
 in the [Trials](https://en.wikipedia.org/wiki/Trials_(series)) franchise. This
-tool has been developed and tested against Trails Fusion, but should work for
+tool has been developed and tested against Trials Fusion, but should work for
 Trials Evolution as well.
 
 ## Building
