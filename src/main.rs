@@ -6,14 +6,17 @@
 use std::{fs, path::Path};
 
 mod pak;
+mod util;
+
 use pak::*;
 
+/// Show the help/usage message, then terminate the program.
 fn show_usage_and_quit(cfg: &getopts::Options) -> ! {
     print!("{}", cfg.usage("Usage: paktool [-hle] ARCHIVE"));
     std::process::exit(0);
 }
 
-/// Print the entry list of an archive to the terminal.
+/// Print a list of all the entries in an archive.
 fn list_archive(path: &str) {
     let archive = Archive::open(path).unwrap();
 
@@ -29,8 +32,10 @@ fn extract_archive(path_str: &str, index: usize) {
     let mut root_path = Path::new(path_str).to_path_buf();
     root_path.set_extension("");
 
-    for i in 0..archive.entries.len() {
-        // If a specific index was requested, skip all other indices.
+    for i in 0..archive.len() {
+        // If a specific index was requested, skip all other indices. Looping
+        // through until the desired index is understandably weird, but why
+        // duplicate code when you don't have to, right...?
         if index != 0 && i != index {
             continue;
         }
@@ -39,11 +44,11 @@ fn extract_archive(path_str: &str, index: usize) {
         let entry = &archive[i];
 
         let entry_path = Path::new(&entry.name);
-        let output_file_path = root_path.join(entry_path);
+        let output_path = root_path.join(entry_path);
 
-        println!("{}", output_file_path.to_str().unwrap());
-        fs::create_dir_all(output_file_path.parent().unwrap()).unwrap();
-        fs::write(output_file_path, &data).unwrap();
+        println!("{}", output_path.to_str().unwrap());
+        fs::create_dir_all(output_path.parent().unwrap()).unwrap();
+        fs::write(output_path, &data).unwrap();
     }
 }
 

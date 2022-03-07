@@ -10,23 +10,26 @@ use std::ops::Deref;
 use byteorder::*;
 use flate2::write::ZlibDecoder;
 
+use crate::util;
+
 /// A PAK archive.
 pub struct Archive {
     file: File,
-    pub entries: Vec<Entry>,
+    entries: Vec<Entry>,
 }
 
 impl Archive {
-    /// Open an archive from the disk.
+    /// Open and parse the archive at the given `path`.
     pub fn open(path: &str) -> Result<Self, std::io::Error> {
         let mut file = std::fs::File::open(path)?;
-
-        let header = Header::read_from(&mut file)?;
-
-        // The entry list starts immediately after the header. Read all of the
-        // entries and store a list of them.
         let mut entries = Vec::new();
-        for _ in 0..header.entry_count {
+
+        // Skip over the magic and first offset fields; we don't use them.
+        file.seek(SeekFrom::Start(8)).unwrap();
+
+        // Read the entry count, then read all of the entries.
+        let entry_count = file.read_u32::<LE>()?;
+        for _ in 0..entry_count {
             entries.push(Entry::read_from(&mut file)?);
         }
 
@@ -34,8 +37,9 @@ impl Archive {
         // names, then update the existing entry list to include name data.
         let name_list_offset = (entries.last().unwrap().offset + 4) as u64;
         file.seek(SeekFrom::Start(name_list_offset))?;
-        for i in 0..header.entry_count - 1 {
+        for i in 0..entry_count - 1 {
             let name_len = file.read_u16::<LE>()?;
+
             let mut raw_name = vec![0u8; name_len.into()];
             file.read_exact(&mut raw_name)?;
 
@@ -54,13 +58,13 @@ impl Archive {
         let entry = &self.entries[index];
 
         let mut data = Vec::new();
-        let mut raw_data = vec![0u8; entry.min_size as usize];
+        let mut raw_data = vec![0u8; entry.compressed_size as usize];
         self.file.seek(SeekFrom::Start(entry.offset.into()))?;
         self.file.read_exact(&mut raw_data)?;
 
-        if entry.flags == 0 {
+        if entry.data_flags == 0 {
             data = raw_data
-        } else if entry.flags == 1 {
+        } else if entry.data_flags == 1 {
             let mut z = ZlibDecoder::new(data);
             z.write_all(&raw_data).unwrap();
             data = z.finish().unwrap();
@@ -78,44 +82,50 @@ impl Deref for Archive {
     }
 }
 
-#[derive(Default)]
-pub struct Header {
-    magic: [u8; 4],
-    offset: u32,
-    entry_count: u32,
+/// Entry data flags/types.
+struct DataFlags;
+impl DataFlags {
+    /// Data is uncompressed and raw.
+    const RAW: u8 = 0;
+
+    /// Data is compressed with Zlib.
+    const ZLIB: u8 = 1;
 }
 
-impl Header {
-    pub fn read_from(f: &mut File) -> Result<Self, std::io::Error> {
-        let mut header = Self::default();
-        f.read_exact(&mut header.magic)?;
-        header.offset = f.read_u32::<LE>()?;
-        header.entry_count = f.read_u32::<LE>()?;
-
-        Ok(header)
-    }
-}
-
+/// An archive entry.
 pub struct Entry {
+    /// Reserved field, unused by PakTool.
     pub reserved: u32,
-    pub min_size: u32,
-    pub size: u32,
-    pub flags: u8,
+
+    /// Size of the entry's data, when compressed.
+    pub compressed_size: u32,
+
+    /// Size of the entry's data, when uncompressed.
+    pub raw_size: u32,
+
+    /// Flags regarding the entry's data type and storage.
+    pub data_flags: u8,
+
+    /// Offset from archive start to the entry's data.
     pub offset: u32,
+
+    /// Name of the file the entry represents.
     pub name: String,
-    pub data: Vec<u8>,
 }
 
 impl Entry {
-    pub fn read_from(f: &mut File) -> Result<Self, std::io::Error> {
+    /// Read/parse an entry from the given `file`.
+    ///
+    /// The caller is responsible for seeking the file to the start of the entry
+    /// before calling this function.
+    pub fn read_from(file: &mut File) -> Result<Self, std::io::Error> {
         let entry = Self {
-            reserved: f.read_u32::<LE>()?,
-            min_size: f.read_u32::<LE>()?,
-            size: f.read_u32::<LE>()?,
-            flags: f.read_u8()?,
-            offset: f.read_u32::<LE>()?,
+            reserved: file.read_u32::<LE>()?,
+            compressed_size: file.read_u32::<LE>()?,
+            raw_size: file.read_u32::<LE>()?,
+            data_flags: file.read_u8()?,
+            offset: file.read_u32::<LE>()?,
             name: String::new(),
-            data: Vec::new(),
         };
 
         Ok(entry)
@@ -123,35 +133,18 @@ impl Entry {
 
     /// Get the formatted line item for this entry.
     pub fn line_item(&self) -> String {
-        let flag = match self.flags {
-            0 => 'r',
-            1 => 'z',
+        let flag = match self.data_flags {
+            DataFlags::RAW => 'r',
+            DataFlags::ZLIB => 'z',
             _ => '?',
         };
 
         format!(
             "{:08x} {:>9} ({}) {}",
             self.offset,
-            display_size(self.size),
+            util::display_size(self.raw_size),
             flag,
             self.name
         )
     }
-}
-
-
-/// File size suffixes, up to gigabytes.
-const SIZE_SUFFIXES: &[&str] = &["KB", "MB", "GB"];
-
-/// Converts a size in bytes into a human-friendly display string.
-fn display_size(bytes: u32) -> String {
-    let mut size = bytes as f32 / 1024.0;
-    let mut degree = 0;
-
-    while size > 1024.0 {
-        size /= 1024.0;
-        degree += 1;
-    }
-
-    format!("{:.2} {}", size, SIZE_SUFFIXES[degree])
 }
